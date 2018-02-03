@@ -19,14 +19,14 @@ int main(int argc, const char**  argv)
   bool help = false;
   
   // dispatch usage
-  if (argc >= 2 && argc <= 5)
+  if (argc >= 2)
   {
-    if (argv[2] == "-v")
+    if (strcmp(argv[1],"-v") == 0)
       // version number
       cout << VERSION << endl;
-    else if (argv[2] == "-h")
+    else if (strcmp(argv[1],"-h") == 0)
       // help message (usage)
-      help = false;
+      help = true;
     else
     {
       // parse args for show IPS difference
@@ -35,18 +35,18 @@ int main(int argc, const char**  argv)
         bin = argv[2];
       unsigned int a = 0;
       unsigned int b = 0;
-      while (argc > 2)
+      while (argc > 3)
       {
         const char* argcs = argv[argc - 1];
         // parse bytecount arguments (-a, -b)
-        if (strlen(argcs) > 4)
+        if (strlen(argcs) > 3)
         {
           char arg = 0;
           if (strncmp(argcs, "-a=", 3) == 0)
             arg = 'a';
           if (strncmp(argcs, "-b=", 3) == 0)
             arg = 'b';
-          if (strncmp(argcs, "-b=", 3) == 0)
+          if (strncmp(argcs, "-c=", 3) == 0)
             arg = 'c';
           if (arg)
           {
@@ -70,6 +70,7 @@ int main(int argc, const char**  argv)
               a = bytecount;
             if (arg == 'b' || arg == 'c')
               b = bytecount;
+            argc --;
           }
           else
           {
@@ -79,7 +80,8 @@ int main(int argc, const char**  argv)
         }
         else
         {
-          cout << "unrecognized argument " << argcs;
+          cout << "unrecognized argument " << argcs << " (expecting byte context count)" << endl;
+          return -1;
         }
       }
       
