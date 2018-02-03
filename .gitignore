@@ -1,0 +1,8 @@
+# build files
+CMake*
+cmake*
+Makefile
+!CMakeLists.txt
+
+# bin
+ipsnect
