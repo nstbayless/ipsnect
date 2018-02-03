@@ -1,12 +1,23 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
+#include <vector>
 
 using namespace std;
 
 const char* VERSION = "ipsnect utility v0.1";
 
-int showdiff(const char* ipsfile, const char* binfile, int a, int b, ostream&);
+struct Hunk
+{
+  bool RLE;
+  unsigned int offset;
+  unsigned int length;
+  unsigned char* payload;
+};
+
+int parsehunks(const char* ipsfile, vector<Hunk>&);
+int listhunks(vector<Hunk>&, ostream&);
+void writehex(ostream&, unsigned int hex, unsigned char nbytes);
 
 int main(int argc, const char**  argv)
 {
@@ -85,8 +96,22 @@ int main(int argc, const char**  argv)
         }
       }
       
-      // show difference
-      return showdiff(ips, bin, a, b, cout);
+      // parse IPS file
+      vector<Hunk> hunks;
+      if (parsehunks(ips, hunks))
+        return -1;
+      
+      if (!bin)
+        listhunks(hunks, cout);
+      else
+        cerr << "diff not yet implemented, sorry!" << endl;
+      
+      // clean up
+      for (Hunk& hunk : hunks)
+      {
+        if (!hunk.RLE)
+          delete[](hunk.payload);
+      }
     }
   }
   else
@@ -118,8 +143,197 @@ int main(int argc, const char**  argv)
   return -failed;
 }
 
-int showdiff(const char* ipsfile, const char* binfile, int a, int b, ostream& out)
+#define recs reinterpret_cast<char*>
+#define errcheck(in, ipsfile) if (in.bad()) {cerr << "ERROR, corrupt IPS file " << ipsfile << endl; return -1;}
+
+const char* const magic = "PATCH";
+
+// reades a sequence of big-endian binary data as an int
+unsigned int readbin(ifstream& in, unsigned char nbytes)
 {
+  // check for endianness
+  int t = 1;
+  bool le = (*(char *)&t == 1);
+  // allocate buffer
+  unsigned char buffer[4];
+  for (int i = 0; i < 4; i++)
+    buffer[i] = 0;
+  
+  // read into buffer
+  for (int i = 0; i < nbytes; i++)
+  {
+    int index = i + (4-nbytes);
+    if (le)
+      index = nbytes-i - 1;
+    in.read(recs(buffer+index), 1);
+    if (in.bad())
+      return -1;
+  }
+  return *(int*)(char*)(buffer);
+}
+
+int parsehunks(const char* ipsfile, vector<Hunk>& hunks)
+{
+  ifstream inIPS(ipsfile, ios::binary);
+  
+  // create binary streams
+  if (inIPS.bad())
+  {
+    cerr << "ERROR opening IPS file " << ipsfile << endl;
+    return -1;
+  }
+  
+  // begin parsing
+  int pos = 0;
+  char header[5];
+  inIPS.read(header, 5);
+  errcheck(inIPS, ipsfile);
+  if (strncmp(header, magic, 5))
+  {
+    cerr << "ERROR, IPS file " << ipsfile << " does not start with \"PATCH\" header." << endl;
+    return -1;
+  }
+  
+  // parse a hunk
+  while (true)
+  {
+    Hunk hunk;
+    
+    // read offset
+    hunk.offset = readbin(inIPS, 3);
+    errcheck(inIPS, ipsfile);
+    if (hunk.offset == 0x454f46)
+      // EOF marker
+      break;
+    
+    // read length
+    hunk.length = readbin(inIPS, 2);
+    errcheck(inIPS, ipsfile);
+    if (hunk.length == 0)
+    {
+      // RLE
+      hunk.RLE = true;
+      hunk.offset = readbin(inIPS, 2);
+      errcheck(inIPS, ipsfile);
+      inIPS.read(recs(&hunk.payload), 1);
+      errcheck(inIPS, ipsfile);
+    }
+    else
+    {
+      // standard payload
+      hunk.RLE = false;
+      hunk.payload = new unsigned char[hunk.length];
+      inIPS.read(recs(hunk.payload), hunk.length);
+      errcheck(inIPS, ipsfile);
+    }
+    
+    // append hunk to list
+    hunks.push_back(hunk);
+  }
   
   return 0;
+}
+
+void writehex(ostream& out, unsigned int val, unsigned char nbytes)
+{
+  for (int i = 0; i < nbytes * 2; i++)
+  {
+    char nibble = (val >> ((nbytes * 8 - 4) - i*4)) & 0xf;
+    if (nibble <= 9)
+      out << (char)('0' + nibble);
+    else
+      out << (char)('A' + (nibble - 10));
+  }
+}
+
+int listhunks(vector<Hunk>& hunks, ostream& out)
+{
+  long totalbytes = 0;
+  int nrle = 0;
+  for (Hunk& hunk : hunks)
+  {
+    totalbytes += hunk.length;
+    nrle += hunk.RLE;
+  }
+  
+  out << "====== IPS summary ======" << endl;
+  out << "hunks: " << hunks.size() << endl;
+  out << "regular hunks: " << hunks.size() - nrle << endl;
+  out << "RLE hunks:     " << nrle << endl;
+  out << "sum of hunk lengths: x";
+  writehex(out, totalbytes, 4);
+  out << " bytes (" << totalbytes << " bytes)" << endl;
+  out << "========= hunks =========";
+  for (Hunk& hunk : hunks)
+  {
+    // specific hunk statistic
+    out << endl << endl;
+    if (hunk.length == 0)
+    {
+      out << "empty hunk"<<endl;
+      continue;
+    }
+    if (hunk.RLE)
+      out << "RLE";
+    else
+      out << "regular";
+    if (hunk.length == 1)
+    {
+      // single-byte summary
+      out << " hunk on byte x";
+      writehex(out, hunk.offset, 3);
+      out << " (1 byte)" << endl;
+    }
+    else
+    {
+      // multi-byte summary
+      out << " hunk on bytes x";
+      writehex(out, hunk.offset, 3);
+      out << "-x";
+      writehex(out, hunk.offset + hunk.length - 1, (hunk.offset + hunk.length - 1 > 0xffffff)?4:3);
+      out << " (" << hunk.length << " bytes)" << endl;
+    }
+    if (hunk.RLE)
+    {
+      // RLE hunk
+      unsigned char hex = reinterpret_cast<unsigned char*>(&hunk.payload)[0];
+      if (hunk.length <= 16)
+      {
+        // display RLE patch verbatim
+        for (int i=0; i<hunk.length; i++)
+        {
+          if (i != 0)
+            out<<" ";
+          writehex(out, hex, 1);
+        }
+        out<<endl;
+      }
+      else
+      {
+        // compress RLE patch with ellipsis
+        for (int i = 0; i < 4; i++)
+        {
+          writehex(out, hex, 1);
+          out<<" ";
+        }
+        out<<"... (repeats for " << hunk.length << " bytes)" << endl;
+      }
+    }
+    else
+    {
+      // regular hunk
+      for (int i = 0; i < hunk.length; i++)
+      {
+        if (i != 0)
+        {
+          if (i % 16)
+            out<<" ";
+          else
+            out<<endl;
+        }
+        writehex(out, hunk.payload[i], 1);
+      }
+      out<<endl;
+    }
+  }
 }
