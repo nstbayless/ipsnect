@@ -16,7 +16,7 @@ struct Hunk
 };
 
 int parsehunks(const char* ipsfile, vector<Hunk>&);
-int listhunks(vector<Hunk>&, ostream&);
+int listhunks(vector<Hunk>&, ostream&, ifstream* compare = nullptr);
 void writehex(ostream&, unsigned int hex, unsigned char nbytes);
 
 int main(int argc, const char**  argv)
@@ -104,7 +104,17 @@ int main(int argc, const char**  argv)
       if (!bin)
         listhunks(hunks, cout);
       else
-        cerr << "diff not yet implemented, sorry!" << endl;
+      {
+        ifstream inBIN(bin, ios::binary);
+  
+        // create binary streams
+        if (inBIN.bad())
+        {
+          cerr << "ERROR opening binary file " << bin << endl;
+          return -1;
+        }
+        listhunks(hunks, cout, &inBIN);
+      }
       
       // clean up
       for (Hunk& hunk : hunks)
@@ -246,7 +256,7 @@ void writehex(ostream& out, unsigned int val, unsigned char nbytes)
   }
 }
 
-int listhunks(vector<Hunk>& hunks, ostream& out)
+int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs)
 {
   long totalbytes = 0;
   int nrle = 0;
@@ -293,6 +303,11 @@ int listhunks(vector<Hunk>& hunks, ostream& out)
       writehex(out, hunk.offset + hunk.length - 1, (hunk.offset + hunk.length - 1 > 0xffffff)?4:3);
       out << " (" << hunk.length << " bytes)" << endl;
     }
+    if (vs)
+    {
+      out << "-------------- in IPS patch data: --------------" << endl;
+    }
+    // display IPS hunk data:
     if (hunk.RLE)
     {
       // RLE hunk
@@ -334,6 +349,38 @@ int listhunks(vector<Hunk>& hunks, ostream& out)
         writehex(out, hunk.payload[i], 1);
       }
       out<<endl;
+    }
+    
+    // display binary comparison:
+    if (vs)
+    {
+      out << "------------- in unpatched binary: -------------" << endl;
+      vs->seekg(hunk.offset);
+      if (vs->bad())
+        out << "(error reading binary)";
+      else {
+        for (long i = 0; i < hunk.length; i++)
+        {
+          if (i != 0)
+          {
+            if (i % 16)
+              out<<" ";
+            else
+              out<<endl;
+          }
+          unsigned char b;
+          if (vs->eof())
+          {
+            if (i != 0)
+              out << endl;
+            out << "(exceeds length of binary file)";
+            break;
+          }
+          b = readbin(*vs, 1);
+          writehex(out, b, 1);
+        }
+      }
+      out << endl;
     }
   }
 }
