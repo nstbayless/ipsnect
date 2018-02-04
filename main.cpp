@@ -223,7 +223,7 @@ int parsehunks(const char* ipsfile, vector<Hunk>& hunks)
     {
       // RLE
       hunk.RLE = true;
-      hunk.offset = readbin(inIPS, 2);
+      hunk.length = readbin(inIPS, 2);
       errcheck(inIPS, ipsfile);
       inIPS.read(recs(&hunk.payload), 1);
       errcheck(inIPS, ipsfile);
@@ -258,7 +258,7 @@ void writehex(ostream& out, unsigned int val, unsigned char nbytes)
 
 void streamhex(istream* in, ostream &out, int nbytes)
 {
-  if (in->bad())
+  if (in->bad() || in->eof())
     out << "(error reading binary)";
   else {
     for (long i = 0; i < nbytes; i++)
@@ -309,7 +309,9 @@ int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs, int pre, int post
     out << endl << endl;
     if (hunk.length == 0)
     {
-      out << "empty hunk"<<endl;
+      out << "empty hunk at x";
+      writehex(out, hunk.offset, 3);
+      out << endl;
       continue;
     }
     if (hunk.RLE)
@@ -344,6 +346,9 @@ int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs, int pre, int post
           streamhex(vs, out, pre);
         }
       }
+      out << "------------- in unpatched binary: ------------" << endl;
+      vs->seekg(hunk.offset);
+      streamhex(vs, out, hunk.length);
       out << "---------------- in IPS patch: ----------------" << endl;
     }
     // display IPS hunk data:
@@ -393,9 +398,6 @@ int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs, int pre, int post
     // display binary comparison:
     if (vs)
     {
-      out << "------------- in unpatched binary: ------------" << endl;
-      vs->seekg(hunk.offset);
-      streamhex(vs, out, hunk.length);
       if (post > 0)
       {
         // display binary comparison context:
