@@ -14,7 +14,7 @@ $ ./ipsnect patch.ips base.bin
 hunks: 3
 regular hunks: 2
 RLE hunks:     1
-sum of hunk lengths: x00000012 bytes (17 bytes)
+sum of hunk lengths: x00000044 bytes (68 bytes)
 ========= hunks =========
 
 regular hunk on bytes x017F17-x017F3B (37 bytes)
@@ -35,10 +35,10 @@ regular hunk on byte x03965D (1 byte)
 8D
 
 
-RLE hunk on bytes x001016-x000FF7 (31 bytes)
+RLE hunk on bytes x001016-x000FF6 (30 bytes)
 ------------- in unpatched binary: ------------
 A5 2A 85 10 A2 00 A9 16 9D 00 04 A9 00 9D C1 05
-A9 09 9D A5 2A 85 10 A2 00 A9 16 9D 00 04 A9
+A9 09 9D A5 2A 85 10 A2 00 A9 16 9D 00 04
 ---------------- in IPS patch: ----------------
-FE FE FE FE ... (repeats for 31 bytes)
+FE FE FE FE ... (repeats for 30 bytes)
 ```
