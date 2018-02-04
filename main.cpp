@@ -16,7 +16,7 @@ struct Hunk
 };
 
 int parsehunks(const char* ipsfile, vector<Hunk>&);
-int listhunks(vector<Hunk>&, ostream&, ifstream* compare = nullptr);
+int listhunks(vector<Hunk>&, ostream&, ifstream* compare = nullptr, int precontext = 0, int postcontext = 0);
 void writehex(ostream&, unsigned int hex, unsigned char nbytes);
 
 int main(int argc, const char**  argv)
@@ -113,7 +113,7 @@ int main(int argc, const char**  argv)
           cerr << "ERROR opening binary file " << bin << endl;
           return -1;
         }
-        listhunks(hunks, cout, &inBIN);
+        listhunks(hunks, cout, &inBIN, b, a);
       }
       
       // clean up
@@ -159,7 +159,7 @@ int main(int argc, const char**  argv)
 const char* const magic = "PATCH";
 
 // reades a sequence of big-endian binary data as an int
-unsigned int readbin(ifstream& in, unsigned char nbytes)
+unsigned int readbin(istream& in, unsigned char nbytes)
 {
   // check for endianness
   int t = 1;
@@ -256,7 +256,36 @@ void writehex(ostream& out, unsigned int val, unsigned char nbytes)
   }
 }
 
-int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs)
+void streamhex(istream* in, ostream &out, int nbytes)
+{
+  if (in->bad())
+    out << "(error reading binary)";
+  else {
+    for (long i = 0; i < nbytes; i++)
+    {
+      if (i != 0)
+      {
+        if (i % 16)
+          out<<" ";
+        else
+          out<<endl;
+      }
+      unsigned char b;
+      if (in->eof())
+      {
+        if (i != 0)
+          out << endl;
+        out << "(exceeds binary length)";
+        break;
+      }
+      b = readbin(*in, 1);
+      writehex(out, b, 1);
+    }
+  }
+  out << endl;
+}
+
+int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs, int pre, int post)
 {
   long totalbytes = 0;
   int nrle = 0;
@@ -305,7 +334,17 @@ int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs)
     }
     if (vs)
     {
-      out << "-------------- in IPS patch data: --------------" << endl;
+      if (pre > 0)
+      {
+        // display binary comparison context:
+        if (vs)
+        {
+          out << "--------- context before (unpatched): ---------" << endl;
+          vs->seekg(hunk.offset - pre);
+          streamhex(vs, out, pre);
+        }
+      }
+      out << "---------------- in IPS patch: ----------------" << endl;
     }
     // display IPS hunk data:
     if (hunk.RLE)
@@ -354,33 +393,15 @@ int listhunks(vector<Hunk>& hunks, ostream& out, ifstream* vs)
     // display binary comparison:
     if (vs)
     {
-      out << "------------- in unpatched binary: -------------" << endl;
+      out << "------------- in unpatched binary: ------------" << endl;
       vs->seekg(hunk.offset);
-      if (vs->bad())
-        out << "(error reading binary)";
-      else {
-        for (long i = 0; i < hunk.length; i++)
-        {
-          if (i != 0)
-          {
-            if (i % 16)
-              out<<" ";
-            else
-              out<<endl;
-          }
-          unsigned char b;
-          if (vs->eof())
-          {
-            if (i != 0)
-              out << endl;
-            out << "(exceeds length of binary file)";
-            break;
-          }
-          b = readbin(*vs, 1);
-          writehex(out, b, 1);
-        }
+      streamhex(vs, out, hunk.length);
+      if (post > 0)
+      {
+        // display binary comparison context:
+        out << "---------- context after (unpatched): ---------" << endl;
+        streamhex(vs, out, post);
       }
-      out << endl;
     }
   }
 }
