@@ -5,7 +5,7 @@
 
 using namespace std;
 
-const char* VERSION = "ipsnect utility v0.1";
+const char* VERSION = "ipsnect utility v1.0";
 
 struct Hunk
 {
