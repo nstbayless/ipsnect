@@ -42,3 +42,15 @@ A9 09 9D A5 2A 85 10 A2 00 A9 16 9D 00 04
 ---------------- in IPS patch: ----------------
 FE FE FE FE ... (repeats for 30 bytes)
 ```
+
+### Compile and run
+
+#### Linux/Mac
+
+1. Install `cmake` with your package manager. Mac users should install `cmake` with [Homebrew](https://brew.sh/).
+2. `cmake CMakeLists.txt`
+3. `make`
+
+#### Windows
+
+See [discussion](https://github.com/nstbayless/ipsnect/issues/2).
